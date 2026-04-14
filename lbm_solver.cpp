@@ -33,16 +33,31 @@ int main()
     for (int q = 0; q < 9; q++) {
         for (int i = 0; i < Nx; i++) {
             for (int j = 0; j < Ny; j++) {
-				f[q * Nx * Ny + i * Ny + j] = w[q] * rho0; 
+				f[q * Nx * Ny + i * Ny + j] = w[q] * rho0;
             }
         }
     }
-
+	// Test print the distribution function at (0,0)
     for (int q = 0; q < 9; q++) {
         std::cout << "f[" << q << "] at (0,0): " << f[q * Nx * Ny + 0 * Ny + 0] << std::endl;
     }
     
-    return 0;
+    // Density field
+	std::vector<double> rho(Nx * Ny, 0.0); 
+
+    for (int i = 0; i < Nx; i++) {
+        for (int j = 0; j < Ny; j++) {
+            for (int q = 0; q < 9; q++) {
+                rho[i * Ny + j] += f[q * Nx * Ny + i * Ny + j];
+            }
+        }
+    }
+	// Test density field (should be 1 at all points)
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++)
+            std::cout << "rho[" << i << ", " << j << "]: " << rho[i * Ny + j] << std::endl;
+    }
+    
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
