@@ -24,7 +24,6 @@ int main()
     // Simulation params
     int Nx = 400;
     int Ny = 100;
-    double tau = 0.52;
 	double rho0 = 1.0;      // Initial density
 
 
@@ -135,13 +134,42 @@ int main()
     std::cout << "Test f_eq" << std::endl;
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) {
-            std::cout << "At(" << i << ", " << j << ") : " << std::endl;
+            std::cout << "At(" << i << ", " << j << "): " << std::endl;
             for (int q = 0; q < 9; q++) {
                 std::cout << "f_eq[" << q << "]: " << f_eq[q * Nx * Ny + i * Ny + j] << std::endl;
             }
             std::cout << std::endl;
         }
     }
+
+
+	// --------------------------------------------------------------
+    // Collision
+	// --------------------------------------------------------------
+    double tau = 0.52;
+	double tau_inv = 1.0 / tau;
+
+	for (int i = 0; i < Nx; i++) {
+		for (int j = 0; j < Ny; j++) {
+			for (int q = 0; q < 9; q++) {
+				f[q * Nx * Ny + i * Ny + j] += tau_inv * (f_eq[q * Nx * Ny + i * Ny + j] - f[q * Nx * Ny + i * Ny + j]);
+			}
+		}
+	}
+
+	// Test collision step
+	std::cout << "Test collision step" << std::endl;
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 3; j++) {
+			std::cout << "At(" << i << ", " << j << "): " << std::endl;
+			for (int q = 0; q < 9; q++) {
+				std::cout << "f[" << q << "]: " << f[q * Nx * Ny + i * Ny + j] << std::endl;
+			}
+			std::cout << std::endl;
+		}
+	}
+
+
 
 }
 
