@@ -169,7 +169,25 @@ int main()
 		}
 	}
 
+	// --------------------------------------------------------------
+	// Streaming
+	// --------------------------------------------------------------
 
+    std::vector<double> f_new(9 * Nx * Ny, 0.0);
+
+    for (int i = 0; i < Nx; i++) {
+        for (int j = 0; j < Ny; j++) {
+            for (int q = 0; q < 9; q++) {
+                // Where does this particle come FROM?
+                int i_src = (i - cx[q] + Nx) % Nx;
+                int j_src = (j - cy[q] + Ny) % Ny;
+
+                f_new[q * Nx * Ny + i * Ny + j] = f[q * Nx * Ny + i_src * Ny + j_src];
+            }
+        }
+    }
+    // Swap buffers
+    std::swap(f, f_new);
 
 }
 
