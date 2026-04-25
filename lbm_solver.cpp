@@ -2,178 +2,80 @@
 //
 
 #include <iostream>
+#include <fstream>
 #include <vector>
 
-int main()
-{   
-    // -------------------------------------------------------------
-    // Define constants and params
-    // -------------------------------------------------------------
-    
-    // D2Q9 Lattice Constants
+// -------------------------------------------------------------
+// Constants — global so all functions can see them
+// -------------------------------------------------------------
+// 
+// D2Q9 Lattice Constants
     // The 9 direction vectors
-    const int cx[9] = { 0, 1, 0, -1, 0, 1, -1, -1, 1 };
-    const int cy[9] = { 0, 0, 1, 0, -1, 1, 1, -1, -1 };
+const int cx[9] = { 0, 1, 0, -1, 0, 1, -1, -1, 1 };
+const int cy[9] = { 0, 0, 1, 0, -1, 1, 1, -1, -1 };
 
-    // The 9 weights corresponding to the directions above
-    const double w[9] = { 4.0 / 9, 1.0 / 9, 1.0 / 9, 1.0 / 9, 1.0 / 9, 1.0 / 36, 1.0 / 36, 1.0 / 36, 1.0 / 36 };
+// The 9 weights corresponding to the directions above
+const double w[9] = { 4.0 / 9, 1.0 / 9, 1.0 / 9, 1.0 / 9, 1.0 / 9, 1.0 / 36, 1.0 / 36, 1.0 / 36, 1.0 / 36 };
 
-	// Opposite indices for streaming step
-    const int opposite[9] = { 0, 3, 4, 1, 2, 7, 8, 5, 6 };
+// Opposite indices for streaming step
+const int opposite[9] = { 0, 3, 4, 1, 2, 7, 8, 5, 6 };
 
-    // Simulation params
-    int Nx = 400;
-    int Ny = 100;
-	double rho0 = 1.0;      // Initial density
-
-
-
-    // -------------------------------------------------------------
-    // Create initial distribution function
-    // -------------------------------------------------------------
-	std::vector<double> f(Nx * Ny * 9, 1.0); 
-
-    // Initialize to equilibrium distribution
-    for (int q = 0; q < 9; q++) {
-        for (int i = 0; i < Nx; i++) {
-            for (int j = 0; j < Ny; j++) {
-				f[q * Nx * Ny + i * Ny + j] = w[q] * rho0;
-            }
-        }
-    }
-	// Test print the distribution function at (0,0)
-    std::cout << "Test print the distribution function: " << std::endl;
-    for (int q = 0; q < 9; q++) {
-        std::cout << "f[" << q << "] at (0,0): " << f[q * Nx * Ny + 0 * Ny + 0] << std::endl;
-    }
-    std::cout << std::endl;
-
-
-
-	// -------------------------------------------------------------
-    // Density field
-    // -------------------------------------------------------------
-	std::vector<double> rho(Nx * Ny, 0.0); 
+// -------------------------------------------------------------
+// Functions
+// -------------------------------------------------------------
+void compute_macroscopic(const std::vector<double>& f,
+    std::vector<double>& rho,
+    std::vector<double>& u_x,
+    std::vector<double>& u_y,
+    int Nx, int Ny) {
 
     for (int i = 0; i < Nx; i++) {
         for (int j = 0; j < Ny; j++) {
+            int idx = i * Ny + j;
+
+            rho[idx] = 0.0;
+            u_x[idx] = 0.0;
+            u_y[idx] = 0.0;
+
             for (int q = 0; q < 9; q++) {
-                rho[i * Ny + j] += f[q * Nx * Ny + i * Ny + j];
+                double fq = f[q * Nx * Ny + idx];
+                rho[idx] += fq;
+                u_x[idx] += fq * cx[q];
+                u_y[idx] += fq * cy[q];
             }
+
+            u_x[idx] /= rho[idx];
+            u_y[idx] /= rho[idx];
         }
     }
-	// Test density field (should be 1 at all points)
-    std::cout << "Test density field (should be 1 at all points)" << std::endl;
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++)
-            std::cout << "rho[" << i << ", " << j << "]: " << rho[i * Ny + j] << std::endl;
-    }
-    std::cout << std::endl;
-    
-    // -------------------------------------------------------------
-    // Compute velocity u 
-    // -------------------------------------------------------------
-    std::vector<double> u_x(Nx * Ny, 0.0);
-    std::vector<double> u_y(Nx * Ny, 0.0);
+}
 
+void collide(std::vector<double>& f,
+    const std::vector<double>& rho,
+    const std::vector<double>& u_x,
+    const std::vector<double>& u_y,
+    double tau, int Nx, int Ny) {
+
+    // Do not create arrays for c_u, u_sq, f_eq, as they are not needed outside this function. Just compute them on the fly for every cell.
     for (int i = 0; i < Nx; i++) {
         for (int j = 0; j < Ny; j++) {
-            for (int q = 0; q < 9; q++) {
-                u_x[i * Ny + j] += f[q * Nx * Ny + i * Ny + j] * cx[q];
-				u_y[i * Ny + j] += f[q * Nx * Ny + i * Ny + j] * cy[q];
-            }
-			u_x[i * Ny + j] /= rho[i * Ny + j];
-            u_y[i * Ny + j] /= rho[i * Ny + j];
-        }
-    }
-    // Test velocity field 
-    std::cout << "Test velocity field" << std::endl;
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-            std::cout << "u_x[" << i << ", " << j << "]: " << u_x[i * Ny + j] << std::endl;
-            std::cout << "u_y[" << i << ", " << j << "]: " << u_y[i * Ny + j] << std::endl;
-        }
-    }
-    std::cout << std::endl;
+            int idx = i * Ny + j;
+            double usq = u_x[idx] * u_x[idx] + u_y[idx] * u_y[idx];
 
-	// -------------------------------------------------------------
-	// Compute equilibrium distribution function feq
-    // -------------------------------------------------------------
-    // Compute c_u
-    std::vector<double> c_u(Nx * Ny * 9, 0.0);
-
-    for (int i = 0; i < Nx; i++) {
-        for (int j = 0; j < Ny; j++) {
             for (int q = 0; q < 9; q++) {
-                c_u[q * Nx * Ny + i * Ny + j] = cx[q] * u_x[i * Ny + j] + cy[q] * u_y[i * Ny + j];
+                double cu = cx[q] * u_x[idx] + cy[q] * u_y[idx];
+                double feq = w[q] * rho[idx] * (1.0 + 3.0 * cu + 4.5 * cu * cu - 1.5 * usq);
+
+                int fidx = q * Nx * Ny + idx;
+                f[fidx] -= (1.0 / tau) * (f[fidx] - feq);
             }
         }
     }
+}
 
-    // Compute u_sq
-    std::vector<double> u_sq(Nx * Ny, 0.0);
-
-    for (int i = 0; i < Nx; i++) {
-        for (int j = 0; j < Ny; j++) {
-            u_sq[i * Ny + j] = u_x[i * Ny + j] * u_x[i * Ny + j] + u_y[i * Ny + j] * u_y[i * Ny + j];
-        }
-    }
-
-	// Compute feq
-	std::vector<double> f_eq(Nx * Ny * 9, 0.0);
-
-    for (int i = 0; i < Nx; i++) {
-        for (int j = 0; j < Ny; j++) {
-            for (int q = 0; q < 9; q++) {
-                f_eq[q * Nx * Ny + i * Ny + j] = w[q] * rho[i * Ny + j] * (1 + 3 * c_u[q * Nx * Ny + i * Ny + j] + 4.5 * c_u[q * Nx * Ny + i * Ny + j] * c_u[q * Nx * Ny + i * Ny + j] - 1.5 * u_sq[i * Ny + j]);
-            }
-        }
-    }
-
-    // Test f_eq
-    std::cout << "Test f_eq" << std::endl;
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-            std::cout << "At(" << i << ", " << j << "): " << std::endl;
-            for (int q = 0; q < 9; q++) {
-                std::cout << "f_eq[" << q << "]: " << f_eq[q * Nx * Ny + i * Ny + j] << std::endl;
-            }
-            std::cout << std::endl;
-        }
-    }
-
-
-	// --------------------------------------------------------------
-    // Collision
-	// --------------------------------------------------------------
-    double tau = 0.52;
-	double tau_inv = 1.0 / tau;
-
-	for (int i = 0; i < Nx; i++) {
-		for (int j = 0; j < Ny; j++) {
-			for (int q = 0; q < 9; q++) {
-				f[q * Nx * Ny + i * Ny + j] += tau_inv * (f_eq[q * Nx * Ny + i * Ny + j] - f[q * Nx * Ny + i * Ny + j]);
-			}
-		}
-	}
-
-	// Test collision step
-	std::cout << "Test collision step" << std::endl;
-	for (int i = 0; i < 3; i++) {
-		for (int j = 0; j < 3; j++) {
-			std::cout << "At(" << i << ", " << j << "): " << std::endl;
-			for (int q = 0; q < 9; q++) {
-				std::cout << "f[" << q << "]: " << f[q * Nx * Ny + i * Ny + j] << std::endl;
-			}
-			std::cout << std::endl;
-		}
-	}
-
-	// --------------------------------------------------------------
-	// Streaming
-	// --------------------------------------------------------------
-
-    std::vector<double> f_new(9 * Nx * Ny, 0.0);
+void stream(std::vector<double>& f,
+    std::vector<double>& f_new,
+    int Nx, int Ny) {
 
     for (int i = 0; i < Nx; i++) {
         for (int j = 0; j < Ny; j++) {
@@ -189,6 +91,37 @@ int main()
     // Swap buffers
     std::swap(f, f_new);
 
+}
+
+
+int main()
+{   
+    // Simulation params
+    int Nx = 400;
+    int Ny = 100;
+	double rho0 = 1.0;      // Initial density
+    double tau = 0.52;
+
+    std::vector<double> f(Nx * Ny * 9, 1.0);
+    std::vector<double> f_new(9 * Nx * Ny, 0.0);
+    std::vector<double> rho(Nx * Ny, 0.0);
+    std::vector<double> u_x(Nx * Ny, 0.0);
+    std::vector<double> u_y(Nx * Ny, 0.0);   
+    
+    // -------------------------------------------------------------
+    // Create initial distribution function
+    // -------------------------------------------------------------
+    for (int q = 0; q < 9; q++) {
+        for (int i = 0; i < Nx; i++) {
+            for (int j = 0; j < Ny; j++) {
+                f[q * Nx * Ny + i * Ny + j] = w[q] * rho0;
+            }
+        }
+    }
+
+	compute_macroscopic(f, rho, u_x, u_y, Nx, Ny);
+	collide(f, rho, u_x, u_y, tau, Nx, Ny);
+	stream(f, f_new, Nx, Ny);
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
