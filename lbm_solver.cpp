@@ -2,6 +2,8 @@
 //
 
 #include <iostream>
+#include <iomanip>
+#include <sstream>
 #include <fstream>
 #include <vector>
 
@@ -26,6 +28,55 @@ double u_inlet = 0.04;
 // -------------------------------------------------------------
 // Functions
 // -------------------------------------------------------------
+
+void write_vtk(int step,
+    const std::vector<double>& u_x,
+    const std::vector<double>& u_y,
+    const std::vector<bool>& obstacle,
+    int Nx, int Ny) {
+
+    // Build filename: results/output_00000.vtk
+    std::ostringstream filename;
+    filename << "results/output_"
+        << std::setw(5) << std::setfill('0') << step
+        << ".vtk";
+
+    std::ofstream file(filename.str());
+
+    // VTK header
+    file << "# vtk DataFile Version 3.0\n";
+    file << "LBM output step " << step << "\n";
+    file << "ASCII\n";
+    file << "DATASET STRUCTURED_POINTS\n";
+    file << "DIMENSIONS " << Nx << " " << Ny << " 1\n";
+    file << "ORIGIN 0 0 0\n";
+    file << "SPACING 1 1 1\n";
+    file << "POINT_DATA " << Nx * Ny << "\n";
+
+    // Velocity magnitude field
+    file << "SCALARS velocity_magnitude double 1\n";
+    file << "LOOKUP_TABLE default\n";
+    for (int j = 0; j < Ny; j++) {
+        for (int i = 0; i < Nx; i++) {
+            int idx = i * Ny + j;
+            double vel = sqrt(u_x[idx] * u_x[idx] + u_y[idx] * u_y[idx]);
+            if (obstacle[idx]) vel = 0.0;
+            file << vel << "\n";
+        }
+    }
+
+    // Obstacle field (useful for visualization)
+    file << "SCALARS obstacle int 1\n";
+    file << "LOOKUP_TABLE default\n";
+    for (int j = 0; j < Ny; j++) {
+        for (int i = 0; i < Nx; i++) {
+            file << (obstacle[i * Ny + j] ? 1 : 0) << "\n";
+        }
+    }
+
+    file.close();
+}
+
 void compute_macroscopic(const std::vector<double>& f,
     std::vector<double>& rho,
     std::vector<double>& u_x,
@@ -124,20 +175,27 @@ void apply_inlet_bc(std::vector<double>& f,
 }
 
 void bounce_back(std::vector<double>& f,
-	const std::vector<bool>& obstacle,
-	int Nx, int Ny) {
+    const std::vector<bool>& obstacle,
+    int Nx, int Ny) {
 
-	for (int i = 0; i < Nx; i++) {
-		for (int j = 0; j < Ny; j++) {
-			if (obstacle[i * Ny + j]) {
-				for (int q = 0; q < 9; q++) {
-					int fidx = q * Nx * Ny + i * Ny + j;
-					int fidx_opposite = opposite[q] * Nx * Ny + i * Ny + j;
-					std::swap(f[fidx], f[fidx_opposite]);
-				}
-			}
-		}
-	}
+    for (int i = 0; i < Nx; i++) {
+        for (int j = 0; j < Ny; j++) {
+            if (!obstacle[i * Ny + j]) continue;
+
+            int idx = i * Ny + j;
+
+            // Use temporary buffer, save all 9 values
+            double temp[9];
+            for (int q = 0; q < 9; q++) {
+                temp[q] = f[q * Nx * Ny + idx];
+            }
+
+            // Write the opposites
+            for (int q = 0; q < 9; q++) {
+                f[q * Nx * Ny + idx] = temp[opposite[q]];
+            }
+        }
+    }
 }
 
 
@@ -179,12 +237,21 @@ int main()
         obstacle[i * Ny + (Ny - 1)] = true; // Top wall
     }
 
-	apply_outlet_bc(f, Nx, Ny);
-	compute_macroscopic(f, rho, u_x, u_y, Nx, Ny);
-    apply_inlet_bc(f, rho, u_x, u_y, Nx, Ny);
-	collide(f, rho, u_x, u_y, tau, Nx, Ny);
-	bounce_back(f, obstacle, Nx, Ny);
-	stream(f, f_new, Nx, Ny);
+    int Nt = 2000;
+
+    for (int step = 0; step < Nt; step++) {
+        apply_outlet_bc(f, Nx, Ny);
+        compute_macroscopic(f, rho, u_x, u_y, Nx, Ny);
+        apply_inlet_bc(f, rho, u_x, u_y, Nx, Ny);
+        collide(f, rho, u_x, u_y, tau, Nx, Ny);
+        bounce_back(f, obstacle, Nx, Ny);
+        stream(f, f_new, Nx, Ny);
+
+        if (step % 10 == 0) {
+            write_vtk(step, u_x, u_y, obstacle, Nx, Ny);
+            std::cout << "Step " << step << " / " << Nt << std::endl;
+        }
+    }
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
