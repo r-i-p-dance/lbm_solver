@@ -20,6 +20,9 @@ const double w[9] = { 4.0 / 9, 1.0 / 9, 1.0 / 9, 1.0 / 9, 1.0 / 9, 1.0 / 36, 1.0
 // Opposite indices for streaming step
 const int opposite[9] = { 0, 3, 4, 1, 2, 7, 8, 5, 6 };
 
+// Inlet velocity
+double u_inlet = 0.04;
+
 // -------------------------------------------------------------
 // Functions
 // -------------------------------------------------------------
@@ -93,6 +96,32 @@ void stream(std::vector<double>& f,
 
 }
 
+void apply_outlet_bc(std::vector<double>& f, int Nx, int Ny) {
+    for (int j = 0; j < Ny; j++) {
+        for (int q = 0; q < 9; q++) {
+            f[q * Nx * Ny + (Nx - 1) * Ny + j] = f[q * Nx * Ny + (Nx - 2) * Ny + j];
+        }
+    }
+}
+
+void apply_inlet_bc(std::vector<double>& f,
+    std::vector<double>& rho,
+    std::vector<double>& u_x,
+    std::vector<double>& u_y,
+    int Nx, int Ny) {
+    for (int j = 0; j < Ny; j++) {
+
+        u_x[j] = u_inlet; // Set a constant velocity at the inlet
+        u_y[j] = 0.0;
+        rho[j] = 1.0; // Set a constant density at the inlet
+
+        double u_sq_inlet = u_x[j] * u_x[j];
+        for (int q = 0; q < 9; q++) {
+            double cu_inlet = cx[q] * u_inlet;
+            f[q * Nx * Ny + j] = w[q] * rho[j] * (1.0 + 3.0 * cu_inlet + 4.5 * cu_inlet * cu_inlet - 1.5 * u_sq_inlet);
+        }
+    }
+}
 
 int main()
 {   
@@ -119,7 +148,9 @@ int main()
         }
     }
 
+	apply_outlet_bc(f, Nx, Ny);
 	compute_macroscopic(f, rho, u_x, u_y, Nx, Ny);
+    apply_inlet_bc(f, rho, u_x, u_y, Nx, Ny);
 	collide(f, rho, u_x, u_y, tau, Nx, Ny);
 	stream(f, f_new, Nx, Ny);
 }
