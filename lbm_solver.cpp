@@ -123,6 +123,25 @@ void apply_inlet_bc(std::vector<double>& f,
     }
 }
 
+void bounce_back(std::vector<double>& f,
+	const std::vector<bool>& obstacle,
+	int Nx, int Ny) {
+
+	for (int i = 0; i < Nx; i++) {
+		for (int j = 0; j < Ny; j++) {
+			if (obstacle[i * Ny + j]) {
+				for (int q = 0; q < 9; q++) {
+					int fidx = q * Nx * Ny + i * Ny + j;
+					int fidx_opposite = opposite[q] * Nx * Ny + i * Ny + j;
+					std::swap(f[fidx], f[fidx_opposite]);
+				}
+			}
+		}
+	}
+}
+
+
+
 int main()
 {   
     // Simulation params
@@ -136,10 +155,10 @@ int main()
     std::vector<double> rho(Nx * Ny, 0.0);
     std::vector<double> u_x(Nx * Ny, 0.0);
     std::vector<double> u_y(Nx * Ny, 0.0);   
+
+
     
-    // -------------------------------------------------------------
     // Create initial distribution function
-    // -------------------------------------------------------------
     for (int q = 0; q < 9; q++) {
         for (int i = 0; i < Nx; i++) {
             for (int j = 0; j < Ny; j++) {
@@ -148,10 +167,23 @@ int main()
         }
     }
 
+	// Initialize obstacle (circular cylinder in the middle of the domain)
+    std::vector<bool> obstacle(Nx * Ny, false);
+    for (int i = 0; i < Nx; i++) {
+        for (int j = 0; j < Ny; j++) {
+            obstacle[i * Ny + j] = (i - Nx / 4) * (i - Nx / 4) + (j - Ny / 2) * (j - Ny / 2) < (Ny / 10) * (Ny / 10);
+        }
+    }
+    for (int i = 0; i < Nx; i++) {
+        obstacle[i * Ny + 0] = true; // Bottom wall
+        obstacle[i * Ny + (Ny - 1)] = true; // Top wall
+    }
+
 	apply_outlet_bc(f, Nx, Ny);
 	compute_macroscopic(f, rho, u_x, u_y, Nx, Ny);
     apply_inlet_bc(f, rho, u_x, u_y, Nx, Ny);
 	collide(f, rho, u_x, u_y, tau, Nx, Ny);
+	bounce_back(f, obstacle, Nx, Ny);
 	stream(f, f_new, Nx, Ny);
 }
 
